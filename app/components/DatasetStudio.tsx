@@ -1,0 +1,230 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+import { parseBlueprint, createLocalBlueprint, type LayoutBlueprint } from "../lib/blueprint.ts";
+import {
+  createModelSamples,
+  inferSchema,
+  parseDatasetText,
+  searchRecords,
+  type DatasetFormat,
+  type JsonRecord,
+  type SchemaField,
+} from "../lib/dataset.ts";
+import { SAMPLE_FILE_NAME, SAMPLE_RECORDS } from "../lib/sample-data.ts";
+import { DatasetCanvas, type ViewKind } from "./DatasetCanvas";
+import { InspectorPanel } from "./InspectorPanel";
+import { SchemaPanel } from "./SchemaPanel";
+import { WorkspaceHeader } from "./WorkspaceHeader";
+
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
+
+interface WorkspaceData {
+  fileName: string;
+  format: DatasetFormat;
+  recordPath: string;
+  records: JsonRecord[];
+  schema: SchemaField[];
+  blueprint: LayoutBlueprint;
+}
+
+function initialWorkspace(): WorkspaceData {
+  const schema = inferSchema(SAMPLE_RECORDS);
+  return {
+    fileName: SAMPLE_FILE_NAME,
+    format: "jsonl",
+    recordPath: "$",
+    records: SAMPLE_RECORDS,
+    schema,
+    blueprint: createLocalBlueprint(SAMPLE_FILE_NAME, schema, SAMPLE_RECORDS),
+  };
+}
+
+function apiErrorMessage(value: unknown): string | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const error = (value as Record<string, unknown>).error;
+  if (typeof error !== "object" || error === null || Array.isArray(error)) return null;
+  const message = (error as Record<string, unknown>).message;
+  return typeof message === "string" ? message : null;
+}
+
+export function DatasetStudio() {
+  const [workspace, setWorkspace] = useState<WorkspaceData>(initialWorkspace);
+  const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [viewKind, setViewKind] = useState<ViewKind>(workspace.blueprint.kind);
+  const [source, setSource] = useState<"local" | "model">("local");
+  const [notice, setNotice] = useState("已载入示例数据；拖入文件即可替换。");
+  const [noticeTone, setNoticeTone] = useState<"neutral" | "success" | "error">("neutral");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const visibleRecords = useMemo(
+    () => searchRecords(workspace.records, query),
+    [workspace.records, query],
+  );
+  const activeRecord = visibleRecords[activeIndex];
+
+  useEffect(() => {
+    function focusSearch(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        document.getElementById("dataset-search")?.focus();
+      }
+    }
+    window.addEventListener("keydown", focusSearch);
+    return () => window.removeEventListener("keydown", focusSearch);
+  }, []);
+
+  function updateQuery(nextQuery: string) {
+    setQuery(nextQuery);
+    setActiveIndex(0);
+  }
+
+  async function loadFile(file: File) {
+    const lowerName = file.name.toLowerCase();
+    if (!lowerName.endsWith(".json") && !lowerName.endsWith(".jsonl") && !lowerName.endsWith(".ndjson")) {
+      setNotice("请选择 .json、.jsonl 或 .ndjson 文件。");
+      setNoticeTone("error");
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      setNotice("首版浏览器支持最大 20 MB 文件；更大的数据建议先转换为抽样 JSONL。");
+      setNoticeTone("error");
+      return;
+    }
+
+    try {
+      const parsed = parseDatasetText(await file.text(), file.name);
+      const schema = inferSchema(parsed.records);
+      const blueprint = createLocalBlueprint(file.name, schema, parsed.records);
+      setWorkspace({
+        fileName: file.name,
+        format: parsed.format,
+        recordPath: parsed.recordPath,
+        records: parsed.records,
+        schema,
+        blueprint,
+      });
+      setQuery("");
+      setActiveIndex(0);
+      setViewKind(blueprint.kind);
+      setSource("local");
+      setNotice(`已在本机解析 ${parsed.records.length.toLocaleString("zh-CN")} 条记录。`);
+      setNoticeTone("success");
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : "无法读取这个文件。");
+      setNoticeTone("error");
+    }
+  }
+
+  async function analyzeWithModel() {
+    if (isAnalyzing) return;
+    setIsAnalyzing(true);
+    setNotice("正在让模型分析 Schema 与少量截断样本…");
+    setNoticeTone("neutral");
+
+    try {
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          fileName: workspace.fileName,
+          schema: workspace.schema.slice(0, 120),
+          samples: createModelSamples(workspace.records),
+        }),
+      });
+      const payload: unknown = await response.json();
+      if (!response.ok) {
+        throw new Error(apiErrorMessage(payload) ?? "模型暂时无法分析布局。");
+      }
+      if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+        throw new Error("模型返回了未知响应。");
+      }
+      const blueprint = parseBlueprint(
+        (payload as Record<string, unknown>).data,
+        workspace.schema,
+      );
+      setWorkspace((current) => ({ ...current, blueprint }));
+      setViewKind(blueprint.kind);
+      setSource("model");
+      setNotice("AI 布局已通过安全校验并应用。");
+      setNoticeTone("success");
+    } catch (caught) {
+      setNotice(
+        caught instanceof Error
+          ? `${caught.message} 已保留本地布局。`
+          : "模型分析失败，已保留本地布局。",
+      );
+      setNoticeTone("error");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+  return (
+    <div
+      className={`forma-app${isDragging ? " is-dragging" : ""}`}
+      onDragEnter={(event) => {
+        event.preventDefault();
+        setIsDragging(true);
+      }}
+      onDragOver={(event) => event.preventDefault()}
+      onDragLeave={(event) => {
+        if (event.currentTarget === event.target) setIsDragging(false);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        setIsDragging(false);
+        const file = event.dataTransfer.files[0];
+        if (file) void loadFile(file);
+      }}
+    >
+      <WorkspaceHeader
+        fileName={workspace.fileName}
+        query={query}
+        onQueryChange={updateQuery}
+        onFile={(file) => void loadFile(file)}
+      />
+
+      <div className="notice-bar" role="status" aria-live="polite">
+        <span className={`notice-indicator tone-${noticeTone}`} aria-hidden="true" />
+        <span>{notice}</span>
+        <span className="notice-separator" aria-hidden="true">·</span>
+        <span>文件内容不会上传</span>
+      </div>
+
+      <div className="workspace-grid">
+        <SchemaPanel
+          schema={workspace.schema}
+          recordPath={workspace.recordPath}
+          recordCount={workspace.records.length}
+          format={workspace.format}
+        />
+        <DatasetCanvas
+          blueprint={workspace.blueprint}
+          records={visibleRecords}
+          activeIndex={activeIndex}
+          viewKind={viewKind}
+          source={source}
+          onViewKindChange={setViewKind}
+          onActiveIndexChange={setActiveIndex}
+          onAnalyze={() => void analyzeWithModel()}
+          isAnalyzing={isAnalyzing}
+        />
+        <InspectorPanel blueprint={workspace.blueprint} record={activeRecord} source={source} />
+      </div>
+
+      {isDragging ? (
+        <div className="drop-overlay" role="status">
+          <div>
+            <span aria-hidden="true">↓</span>
+            <strong>松开即可打开数据集</strong>
+            <p>支持 JSON、JSONL 与 NDJSON，最大 20 MB</p>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}

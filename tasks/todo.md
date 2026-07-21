@@ -12,7 +12,7 @@
   - Verify: unit tests and `npm run build`.
   - Files: `app/api/analyze/route.ts`, `app/lib/blueprint.ts`.
 
-- [ ] Task 3: Dynamic dataset workspace
+- [x] Task 3: Dynamic dataset workspace
   - Acceptance: file drop, schema, search, navigation, specialized renderers,
     raw view, and AI re-analysis work with the built-in sample.
   - Verify: `npm run build` and manual local endpoint check.
