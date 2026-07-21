@@ -1,12 +1,12 @@
 # Forma task list
 
-- [ ] Task 1: Core dataset analysis
+- [x] Task 1: Core dataset analysis
   - Acceptance: JSON/JSONL parsing, record discovery, schema inference, search,
     and local blueprint selection are tested.
   - Verify: `npm run test:unit` and `npx tsc --noEmit`.
   - Files: `app/lib/*`, `package.json`.
 
-- [ ] Task 2: Safe model analysis API
+- [x] Task 2: Safe model analysis API
   - Acceptance: bounded requests reach only the configured endpoint; response
     blueprints are validated; errors use one documented shape.
   - Verify: unit tests and `npm run build`.
