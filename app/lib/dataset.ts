@@ -27,6 +27,17 @@ const COMMON_RECORD_KEYS = new Set([
   "samples",
   "examples",
   "instances",
+  "conversations",
+]);
+
+const SEMANTIC_CHILD_ARRAYS = new Set([
+  "messages",
+  "turns",
+  "tags",
+  "labels",
+  "choices",
+  "annotations",
+  "coordinates",
 ]);
 
 const DANGEROUS_KEYS = new Set(["__proto__", "prototype", "constructor"]);
@@ -63,7 +74,9 @@ function findRecordArray(root: unknown): ArrayCandidate | null {
         objectRatio * 120 +
         Math.min(value.length, 100) -
         depth * 8;
-      candidates.push({ path, value, score });
+      if (isRoot || !SEMANTIC_CHILD_ARRAYS.has(key)) {
+        candidates.push({ path, value, score });
+      }
 
       if (!isRoot) {
         value.slice(0, 3).forEach((item, index) => {

@@ -1,98 +1,75 @@
-# vinext-starter
+# Forma
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Forma 是一个本地优先的动态 JSON 数据集浏览器。它负责稳定的文件读取、
+Schema 推断、搜索、记录导航和安全渲染；可选的大模型只返回受限的布局蓝图，
+不会生成或执行页面代码。
 
-## Prerequisites
+## 已支持
 
-- Node.js `>=22.13.0`
+- 打开或拖入 `.json`、`.jsonl`、`.ndjson`
+- 自动发现根数组以及 `data`、`records`、`items`、`rows` 等记录路径
+- 推断字段类型、样例和出现率
+- 对话、偏好对比、媒体引用、表格、卡片、原始 JSON 视图
+- 全文搜索、记录导航、Schema 与布局蓝图检查器
+- 本地启发式布局，未配置模型时也可完整使用
+- 可选 OpenAI-compatible 模型布局分析
+- 严格验证模型输出，只允许固定视图和字段角色
 
-## Quick Start
+## 本地运行
+
+需要 Node.js `>=22.13.0`。
 
 ```bash
 npm install
 npm run dev
+```
+
+开发地址默认为 `http://localhost:3000`。
+
+## 配置大模型
+
+复制 `.env.example` 为 `.env.local`，填写服务端环境变量：
+
+```bash
+LLM_API_URL=https://your-provider.example/v1/chat/completions
+LLM_API_KEY=
+LLM_MODEL=your-model
+```
+
+模型提供方需要兼容 chat-completions 请求和 JSON object 输出。密钥只在
+`/api/analyze` 服务端路由使用，不会发送到浏览器。未配置时，点击“AI 重组布局”
+会给出说明，并继续保留本地布局。
+
+## 安全模型
+
+- 文件默认只在浏览器中解析，首版上限为 20 MB。
+- 模型请求最多包含 5 条截断样本，整个请求不超过 64 KB。
+- 数据集文本被明确标记为不受信任数据，不能覆盖布局指令。
+- 模型只能返回 `conversation`、`comparison`、`gallery`、`table`、`cards`
+  五种视图，以及白名单字段角色。
+- 模型返回的路径必须存在于当前 Schema；不接受 HTML、CSS、脚本或组件代码。
+- React 负责文本转义；媒体字段中的外部地址不会自动请求。
+- 分析接口包含超时、令牌上限和基础频率限制。
+
+## 命令
+
+```bash
+npm run test:unit   # 解析、Schema、布局和模型边界测试
+npm test            # 完整构建与服务端渲染测试
+npm run lint
+npx tsc --noEmit
 npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+## 代码结构
 
-## Included Shape
+- `app/lib/`：解析、Schema 推断、布局 DSL、模型请求边界
+- `app/components/`：工作台、Schema、渲染器和检查器
+- `app/api/analyze/`：可选的大模型布局分析接口
+- `SPEC.md`：产品规格、接口契约和威胁模型
+- `tasks/`：实现计划与验收清单
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+## 当前限制
 
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
-```
-
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+第一版使用浏览器内存解析，目标是快速验证动态布局框架，而不是替代多 GB
+流式查看器。超大数据、Parquet/Arrow、桌面文件索引和团队标注适合作为后续版本。

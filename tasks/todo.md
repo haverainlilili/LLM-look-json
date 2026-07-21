@@ -18,7 +18,7 @@
   - Verify: `npm run build` and manual local endpoint check.
   - Files: `app/components/*`, `app/page.tsx`, `app/globals.css`.
 
-- [ ] Task 4: Product hardening and handoff
+- [x] Task 4: Product hardening and handoff
   - Acceptance: responsive/accessible states, product metadata, docs, security
     audit, and rendered HTML checks are complete.
   - Verify: `npm test`, `npm run lint`, `npx tsc --noEmit`, `npm audit`.

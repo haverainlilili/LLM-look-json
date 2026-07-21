@@ -30,6 +30,9 @@ test("server-renders the Forma dataset workspace", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(response.headers.get("x-frame-options"), "SAMEORIGIN");
+  assert.match(response.headers.get("content-security-policy") ?? "", /default-src 'self'/);
 
   const html = await response.text();
   assert.match(html, /<title>Forma · 动态数据集浏览器<\/title>/i);

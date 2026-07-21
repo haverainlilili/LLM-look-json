@@ -56,6 +56,24 @@ test("discovers a nested conventional record array", () => {
   assert.equal(result.records.length, 2);
 });
 
+test("keeps a single conversation object intact instead of treating messages as records", () => {
+  const result = parseDatasetText(
+    JSON.stringify({
+      id: "conversation-1",
+      messages: [
+        { role: "user", content: "你好" },
+        { role: "assistant", content: "你好！" },
+      ],
+      tags: ["greeting", "short"],
+    }),
+    "single-conversation.json",
+  );
+
+  assert.equal(result.recordPath, "$");
+  assert.equal(result.records.length, 1);
+  assert.equal(result.records[0].id, "conversation-1");
+});
+
 test("infers nested field types and presence rates", () => {
   const schema = inferSchema([
     {
