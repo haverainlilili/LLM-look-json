@@ -30,6 +30,9 @@ export interface SafeModelOutputFailure {
 type ModelEnvironment = Readonly<Record<string, string | undefined>>;
 
 const DEFAULT_MODEL_TIMEOUT_MS = 45_000;
+export const DEFAULT_ANALYZE_REQUEST_BYTES = 2 * 1024 * 1024;
+export const MAX_ANALYZE_REQUEST_BYTES = 8 * 1024 * 1024;
+const MIN_ANALYZE_REQUEST_BYTES = 64 * 1024;
 
 function environmentValue(value: string | undefined, maxLength: number): string | null {
   const normalized = value?.trim();
@@ -44,6 +47,15 @@ function isAllowedEndpoint(endpoint: URL): boolean {
     endpoint.protocol === "http:" &&
     new Set(["localhost", "127.0.0.1", "[::1]"]).has(endpoint.hostname)
   );
+}
+
+export function resolveAnalyzeRequestLimit(environment: ModelEnvironment): number {
+  const configured = Number(environment.LLM_MAX_INPUT_BYTES);
+  return Number.isInteger(configured) &&
+    configured >= MIN_ANALYZE_REQUEST_BYTES &&
+    configured <= MAX_ANALYZE_REQUEST_BYTES
+    ? configured
+    : DEFAULT_ANALYZE_REQUEST_BYTES;
 }
 
 export function resolveModelConfig(environment: ModelEnvironment): ModelConfig | null {
@@ -123,7 +135,10 @@ function parseSchema(value: unknown): SchemaField[] {
   });
 }
 
-export function parseAnalyzeRequest(input: unknown): AnalyzeRequest {
+export function parseAnalyzeRequest(
+  input: unknown,
+  maxBytes = DEFAULT_ANALYZE_REQUEST_BYTES,
+): AnalyzeRequest {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     invalid("请求体必须是对象");
   }
@@ -134,11 +149,11 @@ export function parseAnalyzeRequest(input: unknown): AnalyzeRequest {
 
   let payloadSize = 0;
   try {
-    payloadSize = JSON.stringify(input).length;
+    payloadSize = new TextEncoder().encode(JSON.stringify(input)).byteLength;
   } catch {
     invalid("请求无法序列化");
   }
-  if (payloadSize > 64_000) invalid("请求超过 64 KB 限制");
+  if (payloadSize > maxBytes) invalid(`请求超过 ${maxBytes} 字节限制`);
 
   return {
     fileName: boundedString(raw.fileName, "文件名", 180),

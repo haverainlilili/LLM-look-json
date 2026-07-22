@@ -5,6 +5,7 @@ import {
   parseAnalyzeRequest,
   parseProviderBlueprint,
   providerStatusDetail,
+  resolveAnalyzeRequestLimit,
   resolveModelConfig,
 } from "../../lib/analyze.ts";
 
@@ -38,13 +39,23 @@ function isAbortError(caught: unknown): boolean {
   );
 }
 
+function formatByteLimit(bytes: number): string {
+  const mib = bytes / (1024 * 1024);
+  return Number.isInteger(mib) ? `${mib} MiB` : `${bytes.toLocaleString("en-US")} 字节`;
+}
+
+function payloadTooLarge(maxBytes: number): Response {
+  return error(413, "PAYLOAD_TOO_LARGE", `分析请求不能超过 ${formatByteLimit(maxBytes)}。`, {
+    stage: "prepare",
+    detail: "请减少字段或样本，或在 .env 中调整 LLM_MAX_INPUT_BYTES。",
+  });
+}
+
 export async function POST(request: Request): Promise<Response> {
+  const maxRequestBytes = resolveAnalyzeRequestLimit(process.env);
   const length = Number(request.headers.get("content-length") ?? 0);
-  if (length > 64_000) {
-    return error(413, "PAYLOAD_TOO_LARGE", "分析请求不能超过 64 KB。", {
-      stage: "prepare",
-      detail: "请减少字段或样本后重试。",
-    });
+  if (Number.isFinite(length) && length > maxRequestBytes) {
+    return payloadTooLarge(maxRequestBytes);
   }
 
   const clientKey =
@@ -58,9 +69,22 @@ export async function POST(request: Request): Promise<Response> {
     });
   }
 
+  let bodyText: string;
+  try {
+    bodyText = await request.text();
+  } catch {
+    return error(400, "INVALID_JSON", "请求体不是有效的 JSON。", {
+      stage: "prepare",
+      detail: "浏览器没有生成有效的分析摘要。",
+    });
+  }
+  if (new TextEncoder().encode(bodyText).byteLength > maxRequestBytes) {
+    return payloadTooLarge(maxRequestBytes);
+  }
+
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(bodyText);
   } catch {
     return error(400, "INVALID_JSON", "请求体不是有效的 JSON。", {
       stage: "prepare",
@@ -70,7 +94,7 @@ export async function POST(request: Request): Promise<Response> {
 
   let input;
   try {
-    input = parseAnalyzeRequest(body);
+    input = parseAnalyzeRequest(body, maxRequestBytes);
   } catch {
     return error(422, "VALIDATION_ERROR", "文件摘要或 Schema 格式无效。", {
       stage: "prepare",

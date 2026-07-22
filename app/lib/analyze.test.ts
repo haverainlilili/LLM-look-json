@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DEFAULT_ANALYZE_REQUEST_BYTES,
   buildProviderRequest,
   buildAnalysisMessages,
   classifyModelOutputFailure,
@@ -9,6 +10,7 @@ import {
   parseAnalyzeRequest,
   parseProviderBlueprint,
   providerStatusDetail,
+  resolveAnalyzeRequestLimit,
   resolveModelConfig,
 } from "./analyze.ts";
 import { inferSchema } from "./dataset.ts";
@@ -34,6 +36,44 @@ test("validates and bounds the analyze request", () => {
         samples: Array.from({ length: 6 }, () => records[0]),
       }),
     /分析请求无效/,
+  );
+});
+
+test("accepts analysis payloads much larger than the former 64 KB limit", () => {
+  const result = parseAnalyzeRequest({
+    fileName: "large.json",
+    schema,
+    samples: [{ text: "x".repeat(256_000) }],
+  });
+
+  assert.equal((result.samples[0] as { text: string }).text.length, 256_000);
+  assert.equal(DEFAULT_ANALYZE_REQUEST_BYTES, 2 * 1024 * 1024);
+});
+
+test("counts UTF-8 bytes and still rejects payloads beyond the configured cap", () => {
+  assert.throws(
+    () =>
+      parseAnalyzeRequest(
+        {
+          fileName: "too-large.json",
+          schema,
+          samples: [{ text: "数".repeat(40_000) }],
+        },
+        100_000,
+      ),
+    /请求超过 100000 字节限制/,
+  );
+});
+
+test("allows .env to raise the analysis request cap up to 8 MiB", () => {
+  assert.equal(resolveAnalyzeRequestLimit({}), 2 * 1024 * 1024);
+  assert.equal(
+    resolveAnalyzeRequestLimit({ LLM_MAX_INPUT_BYTES: String(8 * 1024 * 1024) }),
+    8 * 1024 * 1024,
+  );
+  assert.equal(
+    resolveAnalyzeRequestLimit({ LLM_MAX_INPUT_BYTES: String(16 * 1024 * 1024) }),
+    2 * 1024 * 1024,
   );
 });
 

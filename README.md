@@ -35,17 +35,19 @@ LLM_API_KEY=
 LLM_API_BASE=https://your-provider.example/v1
 LLM_MODEL_NAME=your-model
 LLM_TIMEOUT_MS=45000
+LLM_MAX_INPUT_BYTES=2097152
 ```
 
 模型提供方需要兼容 chat-completions 请求和 JSON object 输出。密钥只在
 `/api/analyze` 服务端路由使用，不会发送到浏览器。未配置时，点击“MING 重组布局”
 会给出说明，并继续保留本地布局。`LLM_TIMEOUT_MS` 可选，允许范围为 5000–120000
-毫秒；推理模型建议使用 45000 或更高。
+毫秒；推理模型建议使用 45000 或更高。分析请求默认允许 2 MiB；如确有需要，
+可通过 `LLM_MAX_INPUT_BYTES` 调整，最高允许 8388608 字节（8 MiB）。
 
 ## 安全模型
 
 - 文件默认只在浏览器中解析，首版上限为 20 MB。
-- 模型请求最多包含 5 条截断样本，整个请求不超过 64 KB。
+- 模型请求最多包含 5 条截断样本，默认不超过 2 MiB，可配置到 8 MiB。
 - 数据集文本被明确标记为不受信任数据，不能覆盖布局指令。
 - 模型只能返回 `conversation`、`comparison`、`gallery`、`table`、`cards`
   五种视图，以及白名单字段角色。
