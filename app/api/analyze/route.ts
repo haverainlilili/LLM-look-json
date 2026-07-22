@@ -3,6 +3,7 @@ import {
   createRateLimiter,
   parseAnalyzeRequest,
   parseProviderBlueprint,
+  resolveModelConfig,
 } from "../../lib/analyze.ts";
 
 const limiter = createRateLimiter({ limit: 8, windowMs: 60_000 });
@@ -19,19 +20,6 @@ function json(data: unknown, status = 200): Response {
 
 function error(status: number, code: string, message: string): Response {
   return json({ error: { code, message } }, status);
-}
-
-function configuredEndpoint(): URL | null {
-  const raw = process.env.LLM_API_URL;
-  if (!raw) return null;
-  try {
-    const endpoint = new URL(raw);
-    if (!new Set(["https:", "http:"]).has(endpoint.protocol)) return null;
-    if (endpoint.username || endpoint.password) return null;
-    return endpoint;
-  } catch {
-    return null;
-  }
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -62,10 +50,8 @@ export async function POST(request: Request): Promise<Response> {
     return error(422, "VALIDATION_ERROR", "文件摘要或 Schema 格式无效。");
   }
 
-  const endpoint = configuredEndpoint();
-  const apiKey = process.env.LLM_API_KEY;
-  const model = process.env.LLM_MODEL;
-  if (!endpoint || !apiKey || !model) {
+  const modelConfig = resolveModelConfig(process.env);
+  if (!modelConfig) {
     return error(
       503,
       "MODEL_NOT_CONFIGURED",
@@ -77,14 +63,14 @@ export async function POST(request: Request): Promise<Response> {
   const timeout = setTimeout(() => controller.abort(), 12_000);
 
   try {
-    const providerResponse = await fetch(endpoint, {
+    const providerResponse = await fetch(modelConfig.endpoint, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${apiKey}`,
+        authorization: `Bearer ${modelConfig.apiKey}`,
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model,
+        model: modelConfig.model,
         messages: buildAnalysisMessages(input),
         temperature: 0.1,
         max_tokens: 1_200,

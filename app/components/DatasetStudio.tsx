@@ -122,7 +122,7 @@ export function DatasetStudio() {
   async function analyzeWithModel() {
     if (isAnalyzing) return;
     setIsAnalyzing(true);
-    setNotice("正在让模型分析 Schema 与少量截断样本…");
+    setNotice("MING 正在分析 Schema 与少量截断样本…");
     setNoticeTone("neutral");
 
     try {
@@ -149,7 +149,7 @@ export function DatasetStudio() {
       setWorkspace((current) => ({ ...current, blueprint }));
       setViewKind(blueprint.kind);
       setSource("model");
-      setNotice("AI 布局已通过安全校验并应用。");
+      setNotice("MING 布局已通过安全校验并应用。");
       setNoticeTone("success");
     } catch (caught) {
       setNotice(

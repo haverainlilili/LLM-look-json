@@ -47,7 +47,7 @@ export function InspectorPanel({ blueprint, record, source }: InspectorPanelProp
               <h2 id="inspector-heading">为什么这样展示</h2>
             </div>
             <span className={`source-chip source-${source}`}>
-              {source === "model" ? "MODEL" : "LOCAL"}
+              {source === "model" ? "MING" : "LOCAL"}
             </span>
           </div>
           <p className="rationale">{blueprint.rationale}</p>
@@ -72,7 +72,7 @@ export function InspectorPanel({ blueprint, record, source }: InspectorPanelProp
             <span aria-hidden="true">⌂</span>
             <div>
               <strong>数据默认留在本机</strong>
-              <p>AI 分析只发送 Schema 与最多 5 条截断样本。</p>
+              <p>MING 分析只发送 Schema 与最多 5 条截断样本。</p>
             </div>
           </div>
         </div>

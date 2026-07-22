@@ -12,6 +12,55 @@ export interface ModelMessage {
   content: string;
 }
 
+export interface ModelConfig {
+  endpoint: URL;
+  apiKey: string;
+  model: string;
+}
+
+type ModelEnvironment = Readonly<Record<string, string | undefined>>;
+
+function environmentValue(value: string | undefined, maxLength: number): string | null {
+  const normalized = value?.trim();
+  if (!normalized || normalized.length > maxLength) return null;
+  return normalized;
+}
+
+function isAllowedEndpoint(endpoint: URL): boolean {
+  if (endpoint.username || endpoint.password) return false;
+  if (endpoint.protocol === "https:") return true;
+  return (
+    endpoint.protocol === "http:" &&
+    new Set(["localhost", "127.0.0.1", "[::1]"]).has(endpoint.hostname)
+  );
+}
+
+export function resolveModelConfig(environment: ModelEnvironment): ModelConfig | null {
+  const apiKey = environmentValue(environment.LLM_API_KEY, 4_096);
+  const model = environmentValue(
+    environment.LLM_MODEL_NAME ?? environment.LLM_MODEL,
+    200,
+  );
+  const base = environmentValue(environment.LLM_API_BASE, 2_048);
+  const explicitEndpoint = environmentValue(environment.LLM_API_URL, 2_048);
+  const rawEndpoint = base ?? explicitEndpoint;
+  if (!apiKey || !model || !rawEndpoint) return null;
+
+  let endpoint: URL;
+  try {
+    endpoint = new URL(rawEndpoint);
+  } catch {
+    return null;
+  }
+  if (!isAllowedEndpoint(endpoint)) return null;
+
+  if (base && !/\/chat\/completions\/?$/.test(endpoint.pathname)) {
+    endpoint.pathname = `${endpoint.pathname.replace(/\/$/, "")}/chat/completions`;
+  }
+
+  return { endpoint, apiKey, model };
+}
+
 function invalid(reason: string): never {
   throw new Error(`分析请求无效：${reason}`);
 }

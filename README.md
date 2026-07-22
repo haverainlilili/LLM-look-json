@@ -31,13 +31,13 @@ npm run dev
 复制 `.env.example` 为 `.env.local`，填写服务端环境变量：
 
 ```bash
-LLM_API_URL=https://your-provider.example/v1/chat/completions
 LLM_API_KEY=
-LLM_MODEL=your-model
+LLM_API_BASE=https://your-provider.example/v1
+LLM_MODEL_NAME=your-model
 ```
 
 模型提供方需要兼容 chat-completions 请求和 JSON object 输出。密钥只在
-`/api/analyze` 服务端路由使用，不会发送到浏览器。未配置时，点击“AI 重组布局”
+`/api/analyze` 服务端路由使用，不会发送到浏览器。未配置时，点击“MING 重组布局”
 会给出说明，并继续保留本地布局。
 
 ## 安全模型

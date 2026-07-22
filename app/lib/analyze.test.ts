@@ -6,6 +6,7 @@ import {
   createRateLimiter,
   parseAnalyzeRequest,
   parseProviderBlueprint,
+  resolveModelConfig,
 } from "./analyze.ts";
 import { inferSchema } from "./dataset.ts";
 
@@ -43,6 +44,37 @@ test("frames dataset content as untrusted data in the model prompt", () => {
   assert.match(messages[0].content, /不受信任的数据/);
   assert.match(messages[0].content, /不得返回 HTML|不要返回 HTML/);
   assert.match(messages[1].content, /prompt-injection\.json/);
+});
+
+test("resolves the model provider from the project's .env variable names", () => {
+  const config = resolveModelConfig({
+    LLM_API_KEY: "secret-key",
+    LLM_API_BASE: "https://provider.example/v1/",
+    LLM_MODEL_NAME: "ming-model",
+  });
+
+  assert.ok(config);
+  assert.equal(config.endpoint.href, "https://provider.example/v1/chat/completions");
+  assert.equal(config.apiKey, "secret-key");
+  assert.equal(config.model, "ming-model");
+});
+
+test("rejects incomplete or unsafe model provider configuration", () => {
+  assert.equal(
+    resolveModelConfig({
+      LLM_API_KEY: "secret-key",
+      LLM_API_BASE: "file:///tmp/provider",
+      LLM_MODEL_NAME: "ming-model",
+    }),
+    null,
+  );
+  assert.equal(
+    resolveModelConfig({
+      LLM_API_BASE: "https://provider.example/v1",
+      LLM_MODEL_NAME: "ming-model",
+    }),
+    null,
+  );
 });
 
 test("extracts and validates a fenced provider blueprint", () => {

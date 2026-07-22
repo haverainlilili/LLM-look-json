@@ -101,14 +101,14 @@ export function DatasetCanvas({
           <div className="title-line">
             <h1>{blueprint.title}</h1>
             <span className={`analysis-badge source-${source}`}>
-              {source === "model" ? "AI 布局" : "本地布局"}
+              {source === "model" ? "MING 布局" : "本地布局"}
             </span>
           </div>
           <p>{blueprint.description}</p>
         </div>
         <button className="ai-button" type="button" onClick={onAnalyze} disabled={isAnalyzing}>
           <span aria-hidden="true">✦</span>
-          {isAnalyzing ? "正在分析…" : "AI 重组布局"}
+          {isAnalyzing ? "MING 正在分析…" : "MING 重组布局"}
         </button>
       </div>
 

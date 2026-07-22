@@ -40,7 +40,7 @@ test("server-renders the Forma dataset workspace", async () => {
   assert.match(html, /打开 JSON/);
   assert.match(html, /对话数据集/);
   assert.match(html, /Schema/);
-  assert.match(html, /AI 重组布局/);
+  assert.match(html, /MING 重组布局/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
