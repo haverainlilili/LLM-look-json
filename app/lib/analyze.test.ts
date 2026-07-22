@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildProviderRequest,
   buildAnalysisMessages,
+  classifyModelOutputFailure,
   createRateLimiter,
   parseAnalyzeRequest,
   parseProviderBlueprint,
+  providerStatusDetail,
   resolveModelConfig,
 } from "./analyze.ts";
 import { inferSchema } from "./dataset.ts";
@@ -57,6 +60,28 @@ test("resolves the model provider from the project's .env variable names", () =>
   assert.equal(config.endpoint.href, "https://provider.example/v1/chat/completions");
   assert.equal(config.apiKey, "secret-key");
   assert.equal(config.model, "ming-model");
+  assert.equal(config.timeoutMs, 45_000);
+});
+
+test("accepts a bounded model timeout from .env", () => {
+  const config = resolveModelConfig({
+    LLM_API_KEY: "secret-key",
+    LLM_API_BASE: "https://provider.example/v1",
+    LLM_MODEL_NAME: "ming-model",
+    LLM_TIMEOUT_MS: "60000",
+  });
+
+  assert.ok(config);
+  assert.equal(config.timeoutMs, 60_000);
+  assert.equal(
+    resolveModelConfig({
+      LLM_API_KEY: "secret-key",
+      LLM_API_BASE: "https://provider.example/v1",
+      LLM_MODEL_NAME: "ming-model",
+      LLM_TIMEOUT_MS: "300000",
+    })?.timeoutMs,
+    45_000,
+  );
 });
 
 test("rejects incomplete or unsafe model provider configuration", () => {
@@ -74,6 +99,39 @@ test("rejects incomplete or unsafe model provider configuration", () => {
       LLM_MODEL_NAME: "ming-model",
     }),
     null,
+  );
+});
+
+test("uses the redirect mode supported by edge runtimes", () => {
+  const config = resolveModelConfig({
+    LLM_API_KEY: "secret-key",
+    LLM_API_BASE: "https://provider.example/v1",
+    LLM_MODEL_NAME: "ming-model",
+  });
+  assert.ok(config);
+
+  const request = buildProviderRequest(
+    config,
+    { fileName: "sample.json", schema, samples: records },
+    new AbortController().signal,
+  );
+
+  assert.equal(request.redirect, "manual");
+  assert.equal(request.method, "POST");
+});
+
+test("turns provider and model failures into safe actionable diagnostics", () => {
+  assert.match(providerStatusDetail(401), /API Key|授权/);
+  assert.match(providerStatusDetail(429), /频率|额度/);
+
+  assert.deepEqual(
+    classifyModelOutputFailure(
+      new Error("布局蓝图无效：字段路径 <script>alert(1)</script> 不在数据 Schema 中"),
+    ),
+    {
+      code: "MODEL_BLUEPRINT_REJECTED",
+      detail: "布局字段或视图类型未通过安全白名单。",
+    },
   );
 });
 

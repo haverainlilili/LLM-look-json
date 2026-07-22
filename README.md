@@ -34,11 +34,13 @@ npm run dev
 LLM_API_KEY=
 LLM_API_BASE=https://your-provider.example/v1
 LLM_MODEL_NAME=your-model
+LLM_TIMEOUT_MS=45000
 ```
 
 模型提供方需要兼容 chat-completions 请求和 JSON object 输出。密钥只在
 `/api/analyze` 服务端路由使用，不会发送到浏览器。未配置时，点击“MING 重组布局”
-会给出说明，并继续保留本地布局。
+会给出说明，并继续保留本地布局。`LLM_TIMEOUT_MS` 可选，允许范围为 5000–120000
+毫秒；推理模型建议使用 45000 或更高。
 
 ## 安全模型
 

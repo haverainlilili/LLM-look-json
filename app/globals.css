@@ -258,6 +258,8 @@ kbd {
 }
 
 .notice-bar {
+  position: relative;
+  z-index: 4;
   display: flex;
   min-height: 32px;
   align-items: center;
@@ -287,6 +289,178 @@ kbd {
 
 .notice-separator {
   color: var(--line-strong);
+}
+
+.analysis-process {
+  position: relative;
+  margin-left: 8px;
+}
+
+.analysis-process summary {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--ink-soft);
+  cursor: pointer;
+  list-style: none;
+}
+
+.analysis-process summary::-webkit-details-marker {
+  display: none;
+}
+
+.analysis-process summary strong {
+  font-size: 10px;
+  font-weight: 680;
+}
+
+.analysis-process summary small,
+.process-result {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.analysis-process.flow-running summary,
+.analysis-process.flow-success summary {
+  border-color: rgb(23 111 101 / 28%);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.analysis-process.flow-error summary {
+  border-color: rgb(154 68 62 / 28%);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.analysis-process-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(440px, calc(100vw - 24px));
+  padding: 15px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: white;
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  text-align: left;
+}
+
+.process-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid var(--line);
+}
+
+.process-heading h2 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: -0.02em;
+}
+
+.process-result {
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  font-weight: 680;
+}
+
+.process-result.result-success {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.process-result.result-error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.process-steps {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 8px 0 4px;
+  list-style: none;
+}
+
+.process-steps li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 9px;
+  padding: 8px 0;
+}
+
+.process-marker {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.process-steps li.step-complete .process-marker,
+.process-steps li.step-active .process-marker {
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.process-steps li.step-error .process-marker {
+  border-color: transparent;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.process-steps li strong {
+  display: block;
+  margin-top: 1px;
+  font-size: 11px;
+}
+
+.process-steps li p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.process-steps li > small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.process-steps li.step-active > small,
+.process-steps li.step-complete > small {
+  color: var(--accent-ink);
+}
+
+.process-steps li.step-error > small {
+  color: var(--danger);
+}
+
+.process-privacy {
+  margin: 5px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 9px;
 }
 
 .workspace-grid {
@@ -1252,7 +1426,7 @@ kbd {
   .brand-tagline,
   .search-box kbd,
   .notice-separator,
-  .notice-bar span:last-child {
+  .notice-bar > span:last-of-type {
     display: none;
   }
 
@@ -1263,6 +1437,22 @@ kbd {
   .notice-bar {
     justify-content: flex-start;
     padding-inline: 12px;
+  }
+
+  .analysis-process {
+    margin-left: auto;
+  }
+
+  .analysis-process summary strong {
+    display: none;
+  }
+
+  .analysis-process-popover {
+    position: fixed;
+    top: 104px;
+    right: 12px;
+    left: 12px;
+    width: auto;
   }
 
   .workspace-grid {

@@ -16,9 +16,20 @@ export interface ModelConfig {
   endpoint: URL;
   apiKey: string;
   model: string;
+  timeoutMs: number;
+}
+
+export interface SafeModelOutputFailure {
+  code:
+    | "MODEL_BLUEPRINT_REJECTED"
+    | "MODEL_RESPONSE_NOT_JSON"
+    | "MODEL_RESPONSE_UNSUPPORTED";
+  detail: string;
 }
 
 type ModelEnvironment = Readonly<Record<string, string | undefined>>;
+
+const DEFAULT_MODEL_TIMEOUT_MS = 45_000;
 
 function environmentValue(value: string | undefined, maxLength: number): string | null {
   const normalized = value?.trim();
@@ -44,6 +55,11 @@ export function resolveModelConfig(environment: ModelEnvironment): ModelConfig |
   const base = environmentValue(environment.LLM_API_BASE, 2_048);
   const explicitEndpoint = environmentValue(environment.LLM_API_URL, 2_048);
   const rawEndpoint = base ?? explicitEndpoint;
+  const configuredTimeout = Number(environment.LLM_TIMEOUT_MS);
+  const timeoutMs =
+    Number.isInteger(configuredTimeout) && configuredTimeout >= 5_000 && configuredTimeout <= 120_000
+      ? configuredTimeout
+      : DEFAULT_MODEL_TIMEOUT_MS;
   if (!apiKey || !model || !rawEndpoint) return null;
 
   let endpoint: URL;
@@ -58,7 +74,7 @@ export function resolveModelConfig(environment: ModelEnvironment): ModelConfig |
     endpoint.pathname = `${endpoint.pathname.replace(/\/$/, "")}/chat/completions`;
   }
 
-  return { endpoint, apiKey, model };
+  return { endpoint, apiKey, model, timeoutMs };
 }
 
 function invalid(reason: string): never {
@@ -172,6 +188,72 @@ export function buildAnalysisMessages(input: AnalyzeRequest): ModelMessage[] {
       }),
     },
   ];
+}
+
+export function buildProviderRequest(
+  config: ModelConfig,
+  input: AnalyzeRequest,
+  signal: AbortSignal,
+): RequestInit {
+  return {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${config.apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages: buildAnalysisMessages(input),
+      temperature: 0.1,
+      max_tokens: 1_200,
+      response_format: { type: "json_object" },
+    }),
+    signal,
+    // Cloudflare/Workerd supports follow/manual, but deliberately rejects "error".
+    redirect: "manual",
+  };
+}
+
+export function providerStatusDetail(status: number): string {
+  if (status === 400) {
+    return "模型不接受当前请求参数，请确认它兼容 chat-completions 和 JSON 输出。";
+  }
+  if (status === 401 || status === 403) {
+    return `模型服务返回 HTTP ${status}，请检查 API Key 和访问权限。`;
+  }
+  if (status === 404) {
+    return "模型服务返回 HTTP 404，请检查 API Base 和模型名称。";
+  }
+  if (status === 408 || status === 504) {
+    return `模型服务返回 HTTP ${status}，请求在上游超时。`;
+  }
+  if (status === 429) {
+    return "模型服务返回 HTTP 429，请检查调用频率或账户额度。";
+  }
+  if (status >= 500) {
+    return `模型服务返回 HTTP ${status}，上游服务暂时不可用。`;
+  }
+  return `模型服务返回 HTTP ${status}，未生成可用布局。`;
+}
+
+export function classifyModelOutputFailure(error: unknown): SafeModelOutputFailure {
+  const message = error instanceof Error ? error.message : "";
+  if (message.startsWith("布局蓝图无效：")) {
+    return {
+      code: "MODEL_BLUEPRINT_REJECTED",
+      detail: "布局字段或视图类型未通过安全白名单。",
+    };
+  }
+  if (message.includes("有效的 JSON")) {
+    return {
+      code: "MODEL_RESPONSE_NOT_JSON",
+      detail: "模型响应不是可解析的 JSON 对象。",
+    };
+  }
+  return {
+    code: "MODEL_RESPONSE_UNSUPPORTED",
+    detail: "模型响应结构与 OpenAI chat-completions 格式不兼容。",
+  };
 }
 
 function providerContent(response: unknown): string {
