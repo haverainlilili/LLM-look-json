@@ -42,7 +42,8 @@ body {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 
@@ -51,7 +52,8 @@ button {
 }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+textarea:focus-visible {
   outline: 3px solid rgb(23 111 101 / 24%);
   outline-offset: 2px;
 }
@@ -1199,6 +1201,69 @@ kbd {
   border-bottom-color: var(--accent);
   color: var(--ink);
   font-weight: 650;
+}
+
+.model-guidance {
+  margin-bottom: 22px;
+  padding: 13px;
+  border: 1px solid #cfe1dc;
+  border-radius: var(--radius-md);
+  background: linear-gradient(145deg, #f4faf8 0%, #eef6f3 100%);
+}
+
+.model-guidance-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.model-guidance-heading h2 {
+  margin: 3px 0 0;
+  font-size: 13px;
+  letter-spacing: -0.02em;
+}
+
+.model-guidance-heading > span {
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.model-guidance textarea {
+  width: 100%;
+  min-height: 104px;
+  margin-top: 11px;
+  padding: 10px 11px;
+  resize: vertical;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: rgb(255 255 255 / 88%);
+  color: var(--ink);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.model-guidance textarea::placeholder {
+  color: #939c96;
+}
+
+.model-guidance textarea:focus {
+  border-color: rgb(23 111 101 / 62%);
+  background: white;
+}
+
+.model-guidance textarea:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.model-guidance > p {
+  margin: 8px 0 0;
+  color: #52716a;
+  font-size: 8px;
+  line-height: 1.5;
 }
 
 .inspector-title {

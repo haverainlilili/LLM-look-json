@@ -22,6 +22,7 @@ import {
   type JsonRecord,
   type SchemaField,
 } from "../lib/dataset.ts";
+import { MAX_LAYOUT_GUIDANCE_LENGTH } from "../lib/analysis-guidance.ts";
 import { SAMPLE_FILE_NAME, SAMPLE_RECORDS } from "../lib/sample-data.ts";
 import { AnalysisProcess } from "./AnalysisProcess";
 import { DatasetCanvas, type ViewKind } from "./DatasetCanvas";
@@ -62,6 +63,7 @@ export function DatasetStudio() {
   const [noticeTone, setNoticeTone] = useState<"neutral" | "success" | "error">("neutral");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [layoutGuidance, setLayoutGuidance] = useState("");
   const [analysisFlow, setAnalysisFlow] = useState<AnalysisFlow>(createIdleAnalysisFlow);
 
   const visibleRecords = useMemo(
@@ -134,7 +136,11 @@ export function DatasetStudio() {
     };
     setIsAnalyzing(true);
     setAnalysisFlow(startAnalysisFlow(workspace.schema.length, samples.length));
-    setNotice("MING 正在分析 Schema 与少量截断样本…");
+    setNotice(
+      layoutGuidance.trim()
+        ? "MING 正在根据展示指导分析 Schema 与少量截断样本…"
+        : "MING 正在分析 Schema 与少量截断样本…",
+    );
     setNoticeTone("neutral");
 
     try {
@@ -145,6 +151,7 @@ export function DatasetStudio() {
           fileName: workspace.fileName,
           schema: workspace.schema.slice(0, 120),
           samples,
+          layoutGuidance: layoutGuidance.slice(0, MAX_LAYOUT_GUIDANCE_LENGTH),
         }),
       });
       let payload: unknown;
@@ -249,7 +256,14 @@ export function DatasetStudio() {
           onAnalyze={() => void analyzeWithModel()}
           isAnalyzing={isAnalyzing}
         />
-        <InspectorPanel blueprint={workspace.blueprint} record={activeRecord} source={source} />
+        <InspectorPanel
+          blueprint={workspace.blueprint}
+          record={activeRecord}
+          source={source}
+          layoutGuidance={layoutGuidance}
+          isAnalyzing={isAnalyzing}
+          onLayoutGuidanceChange={setLayoutGuidance}
+        />
       </div>
 
       {isDragging ? (

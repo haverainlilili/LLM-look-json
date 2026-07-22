@@ -98,7 +98,7 @@ export async function POST(request: Request): Promise<Response> {
   } catch {
     return error(422, "VALIDATION_ERROR", "文件摘要或 Schema 格式无效。", {
       stage: "prepare",
-      detail: "Schema、文件名或样本未通过输入校验。",
+      detail: "Schema、文件名、样本或展示指导未通过输入校验。",
     });
   }
 

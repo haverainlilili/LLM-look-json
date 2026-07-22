@@ -4,14 +4,25 @@ import { useState } from "react";
 
 import type { LayoutBlueprint } from "../lib/blueprint.ts";
 import type { JsonRecord } from "../lib/dataset.ts";
+import { MAX_LAYOUT_GUIDANCE_LENGTH } from "../lib/analysis-guidance.ts";
 
 interface InspectorPanelProps {
   blueprint: LayoutBlueprint;
   record?: JsonRecord;
   source: "local" | "model";
+  layoutGuidance: string;
+  isAnalyzing: boolean;
+  onLayoutGuidanceChange: (guidance: string) => void;
 }
 
-export function InspectorPanel({ blueprint, record, source }: InspectorPanelProps) {
+export function InspectorPanel({
+  blueprint,
+  record,
+  source,
+  layoutGuidance,
+  isAnalyzing,
+  onLayoutGuidanceChange,
+}: InspectorPanelProps) {
   const [tab, setTab] = useState<"blueprint" | "raw">("blueprint");
 
   return (
@@ -38,6 +49,34 @@ export function InspectorPanel({ blueprint, record, source }: InspectorPanelProp
           当前 JSON
         </button>
       </div>
+
+      <section className="model-guidance" aria-labelledby="model-guidance-heading">
+        <div className="model-guidance-heading">
+          <div>
+            <p className="eyebrow">MING 输入</p>
+            <h2 id="model-guidance-heading">展示指导</h2>
+          </div>
+          <span aria-label={`已输入 ${layoutGuidance.length} 字`}>
+            {layoutGuidance.length} / {MAX_LAYOUT_GUIDANCE_LENGTH}
+          </span>
+        </div>
+        <label className="visually-hidden" htmlFor="layout-guidance">
+          指导 MING 如何拆析和展示数据集
+        </label>
+        <textarea
+          id="layout-guidance"
+          value={layoutGuidance}
+          maxLength={MAX_LAYOUT_GUIDANCE_LENGTH}
+          rows={5}
+          disabled={isAnalyzing}
+          aria-describedby="model-guidance-help"
+          placeholder="例如：优先展示 prompt 和 response；按 score 分组；隐藏技术字段。"
+          onChange={(event) => onLayoutGuidanceChange(event.target.value)}
+        />
+        <p id="model-guidance-help">
+          点击“MING 重组布局”时一并发送。它只影响展示偏好，不能绕过安全规则。
+        </p>
+      </section>
 
       {tab === "blueprint" ? (
         <div id="blueprint-panel" role="tabpanel" aria-labelledby="blueprint-tab">
@@ -72,7 +111,7 @@ export function InspectorPanel({ blueprint, record, source }: InspectorPanelProp
             <span aria-hidden="true">⌂</span>
             <div>
               <strong>数据默认留在本机</strong>
-              <p>MING 分析只发送 Schema 与最多 5 条截断样本。</p>
+              <p>MING 分析只发送 Schema、最多 5 条截断样本及你填写的展示指导。</p>
             </div>
           </div>
         </div>
