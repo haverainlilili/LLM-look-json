@@ -1,5 +1,11 @@
+"use client";
+
+import { useState } from "react";
+
 import type { LayoutBlueprint, LayoutKind } from "../lib/blueprint.ts";
 import { getValueAtPath, type JsonRecord } from "../lib/dataset.ts";
+import { pageStartIndex, paginationForIndex } from "../lib/pagination.ts";
+import { PaginationControls } from "./PaginationControls";
 import { RecordRenderer } from "./RecordRenderer";
 
 export type ViewKind = LayoutKind | "raw";
@@ -39,11 +45,15 @@ function TableView({
   blueprint,
   records,
   activeIndex,
+  start,
+  end,
   onSelect,
 }: {
   blueprint: LayoutBlueprint;
   records: JsonRecord[];
   activeIndex: number;
+  start: number;
+  end: number;
   onSelect: (index: number) => void;
 }) {
   const fields = blueprint.fields.slice(0, 6);
@@ -59,21 +69,33 @@ function TableView({
           </tr>
         </thead>
         <tbody>
-          {records.slice(0, 100).map((record, index) => (
-            <tr className={activeIndex === index ? "is-selected" : undefined} key={index}>
-              <th scope="row">
-                <button type="button" onClick={() => onSelect(index)} aria-label={`查看第 ${index + 1} 条`}>
-                  {String(index + 1).padStart(2, "0")}
-                </button>
-              </th>
-              {fields.map((field) => (
-                <td key={field.path}>{compact(getValueAtPath(record, field.path))}</td>
-              ))}
-            </tr>
-          ))}
+          {records.slice(start, end).map((record, pageIndex) => {
+            const recordIndex = start + pageIndex;
+            return (
+              <tr
+                className={activeIndex === recordIndex ? "is-selected" : undefined}
+                key={recordIndex}
+              >
+                <th scope="row">
+                  <button
+                    type="button"
+                    onClick={() => onSelect(recordIndex)}
+                    aria-label={`查看第 ${recordIndex + 1} 条`}
+                  >
+                    {String(recordIndex + 1).padStart(2, "0")}
+                  </button>
+                </th>
+                {fields.map((field) => (
+                  <td key={field.path}>{compact(getValueAtPath(record, field.path))}</td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
-      {records.length > 100 ? <p className="table-limit">表格先展示前 100 条，使用搜索缩小范围。</p> : null}
+      <p className="table-limit">
+        第 {start + 1}–{end} 条，共 {records.length.toLocaleString("zh-CN")} 条
+      </p>
     </div>
   );
 }
@@ -89,10 +111,17 @@ export function DatasetCanvas({
   onAnalyze,
   isAnalyzing,
 }: DatasetCanvasProps) {
+  const [tablePageSize, setTablePageSize] = useState(25);
   const activeRecord = records[activeIndex];
   const viewOptions: ViewKind[] = Array.from(
     new Set<ViewKind>([blueprint.kind, "cards", "table", "raw"]),
   );
+  const pageSize = viewKind === "table" ? tablePageSize : 1;
+  const pagination = paginationForIndex(records.length, pageSize, activeIndex);
+
+  function selectPage(page: number) {
+    onActiveIndexChange(pageStartIndex(records.length, pageSize, page));
+  }
 
   return (
     <main className="dataset-canvas">
@@ -126,27 +155,13 @@ export function DatasetCanvas({
             </button>
           ))}
         </div>
-        <div className="record-navigation" aria-label="记录导航">
-          <button
-            type="button"
-            onClick={() => onActiveIndexChange(Math.max(0, activeIndex - 1))}
-            disabled={activeIndex === 0 || records.length === 0}
-            aria-label="上一条记录"
-          >
-            ←
-          </button>
-          <span>
-            <strong>{records.length === 0 ? 0 : activeIndex + 1}</strong> / {records.length}
-          </span>
-          <button
-            type="button"
-            onClick={() => onActiveIndexChange(Math.min(records.length - 1, activeIndex + 1))}
-            disabled={records.length === 0 || activeIndex >= records.length - 1}
-            aria-label="下一条记录"
-          >
-            →
-          </button>
-        </div>
+        <PaginationControls
+          page={pagination.page}
+          pageCount={pagination.pageCount}
+          tablePageSize={viewKind === "table" ? tablePageSize : undefined}
+          onPageChange={selectPage}
+          onTablePageSizeChange={setTablePageSize}
+        />
       </div>
 
       <div className="canvas-content">
@@ -161,6 +176,8 @@ export function DatasetCanvas({
             blueprint={blueprint}
             records={records}
             activeIndex={activeIndex}
+            start={pagination.start}
+            end={pagination.end}
             onSelect={onActiveIndexChange}
           />
         ) : (

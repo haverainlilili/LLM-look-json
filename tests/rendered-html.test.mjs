@@ -41,6 +41,8 @@ test("server-renders the Forma dataset workspace", async () => {
   assert.match(html, /对话数据集/);
   assert.match(html, /Schema/);
   assert.match(html, /MING 重组布局/);
+  assert.match(html, /分页导航/);
+  assert.match(html, /选择页码/);
   assert.match(html, /展示指导/);
   assert.match(html, /优先展示 prompt 和 response/);
   assert.match(html, /MING 分析流程/);
