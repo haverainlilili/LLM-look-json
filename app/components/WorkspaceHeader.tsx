@@ -1,14 +1,12 @@
 "use client";
 
-import { useRef } from "react";
-
 import { AddressImport } from "./AddressImport";
 
 interface WorkspaceHeaderProps {
   fileName: string;
   query: string;
   onQueryChange: (query: string) => void;
-  onFile: (file: File) => void;
+  onOpenFile: () => void;
   onAddress: (address: string) => Promise<void>;
 }
 
@@ -16,11 +14,9 @@ export function WorkspaceHeader({
   fileName,
   query,
   onQueryChange,
-  onFile,
+  onOpenFile,
   onAddress,
 }: WorkspaceHeaderProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-
   return (
     <header className="app-header">
       <div className="brand-lockup">
@@ -51,19 +47,8 @@ export function WorkspaceHeader({
           <span className="status-dot" aria-hidden="true" />
           <span>{fileName}</span>
         </div>
-        <input
-          ref={inputRef}
-          className="visually-hidden"
-          type="file"
-          accept=".json,.jsonl,.ndjson,application/json"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) onFile(file);
-            event.target.value = "";
-          }}
-        />
         <div className="open-json-control">
-          <button className="primary-button" type="button" onClick={() => inputRef.current?.click()}>
+          <button className="primary-button" type="button" onClick={onOpenFile}>
             <span aria-hidden="true">＋</span>
             打开 JSON
           </button>

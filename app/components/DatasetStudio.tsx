@@ -1,72 +1,30 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  completeAnalysisFlow,
-  createIdleAnalysisFlow,
-  failAnalysisFlow,
-  parseAnalysisFailure,
-  parseAnalysisTrace,
-  startAnalysisFlow,
-  type AnalysisFlow,
-  type AnalysisStage,
-} from "../lib/analysis-flow.ts";
-import { parseBlueprint, createLocalBlueprint, type LayoutBlueprint } from "../lib/blueprint.ts";
-import {
-  createModelSamples,
-  inferSchema,
-  parseDatasetText,
-  searchRecords,
-  type DatasetFormat,
-  type JsonRecord,
-  type SchemaField,
-} from "../lib/dataset.ts";
-import { MAX_LAYOUT_GUIDANCE_LENGTH } from "../lib/analysis-guidance.ts";
-import {
-  fetchDatasetFromAddress,
-  MAX_DATASET_FILE_BYTES,
-} from "../lib/dataset-source.ts";
-import { SAMPLE_FILE_NAME, SAMPLE_RECORDS } from "../lib/sample-data.ts";
+import { searchRecords } from "../lib/dataset.ts";
 import { AnalysisProcess } from "./AnalysisProcess";
-import { DatasetCanvas, type ViewKind } from "./DatasetCanvas";
+import { DatasetCanvas } from "./DatasetCanvas";
+import { DatasetTabs } from "./DatasetTabs";
 import { InspectorPanel } from "./InspectorPanel";
 import { SchemaPanel } from "./SchemaPanel";
+import { useDatasetWorkspace } from "./useDatasetWorkspace";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 
-interface WorkspaceData {
-  fileName: string;
-  format: DatasetFormat;
-  recordPath: string;
-  records: JsonRecord[];
-  schema: SchemaField[];
-  blueprint: LayoutBlueprint;
-}
-
-function initialWorkspace(): WorkspaceData {
-  const schema = inferSchema(SAMPLE_RECORDS);
-  return {
-    fileName: SAMPLE_FILE_NAME,
-    format: "jsonl",
-    recordPath: "$",
-    records: SAMPLE_RECORDS,
-    schema,
-    blueprint: createLocalBlueprint(SAMPLE_FILE_NAME, schema, SAMPLE_RECORDS),
-  };
-}
-
 export function DatasetStudio() {
-  const [workspace, setWorkspace] = useState<WorkspaceData>(initialWorkspace);
-  const [query, setQuery] = useState("");
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [viewKind, setViewKind] = useState<ViewKind>(workspace.blueprint.kind);
-  const [source, setSource] = useState<"local" | "model">("local");
-  const [notice, setNotice] = useState("已载入示例数据；拖入文件即可替换。");
-  const [noticeTone, setNoticeTone] = useState<"neutral" | "success" | "error">("neutral");
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const dataset = useDatasetWorkspace();
   const [isDragging, setIsDragging] = useState(false);
-  const [layoutGuidance, setLayoutGuidance] = useState("");
-  const [analysisFlow, setAnalysisFlow] = useState<AnalysisFlow>(createIdleAnalysisFlow);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const {
+    workspace,
+    query,
+    activeIndex,
+    viewKind,
+    source,
+    layoutGuidance,
+    analysisFlow,
+    tablePageSize,
+  } = dataset.activeSession;
 
   const visibleRecords = useMemo(
     () => searchRecords(workspace.records, query),
@@ -85,149 +43,6 @@ export function DatasetStudio() {
     return () => window.removeEventListener("keydown", focusSearch);
   }, []);
 
-  function updateQuery(nextQuery: string) {
-    setQuery(nextQuery);
-    setActiveIndex(0);
-  }
-
-  function applyDatasetText(text: string, fileName: string, sourceLabel: string) {
-    const parsed = parseDatasetText(text, fileName);
-    const schema = inferSchema(parsed.records);
-    const blueprint = createLocalBlueprint(fileName, schema, parsed.records);
-    setWorkspace({
-      fileName,
-      format: parsed.format,
-      recordPath: parsed.recordPath,
-      records: parsed.records,
-      schema,
-      blueprint,
-    });
-    setQuery("");
-    setActiveIndex(0);
-    setViewKind(blueprint.kind);
-    setSource("local");
-    setAnalysisFlow(createIdleAnalysisFlow());
-    setNotice(
-      `${sourceLabel}解析 ${parsed.records.length.toLocaleString("zh-CN")} 条记录。`,
-    );
-    setNoticeTone("success");
-  }
-
-  async function loadFile(file: File) {
-    const lowerName = file.name.toLowerCase();
-    if (!lowerName.endsWith(".json") && !lowerName.endsWith(".jsonl") && !lowerName.endsWith(".ndjson")) {
-      setNotice("请选择 .json、.jsonl 或 .ndjson 文件。");
-      setNoticeTone("error");
-      return;
-    }
-    if (file.size > MAX_DATASET_FILE_BYTES) {
-      setNotice("首版浏览器支持最大 20 MB 文件；更大的数据建议先转换为抽样 JSONL。");
-      setNoticeTone("error");
-      return;
-    }
-
-    try {
-      applyDatasetText(await file.text(), file.name, "已在本机");
-    } catch (caught) {
-      setNotice(caught instanceof Error ? caught.message : "无法读取这个文件。");
-      setNoticeTone("error");
-    }
-  }
-
-  async function loadAddress(address: string): Promise<void> {
-    setNotice("正在从文件地址读取 JSON…");
-    setNoticeTone("neutral");
-
-    try {
-      const dataset = await fetchDatasetFromAddress(address);
-      applyDatasetText(dataset.text, dataset.fileName, "已从文件地址读取并");
-    } catch (caught) {
-      const error = caught instanceof Error ? caught : new Error("无法读取这个文件地址。");
-      setNotice(error.message);
-      setNoticeTone("error");
-      throw error;
-    }
-  }
-
-  async function analyzeWithModel() {
-    if (isAnalyzing) return;
-    const samples = createModelSamples(workspace.records);
-    let recordedFailure = false;
-    const recordFailure = (stage: AnalysisStage, detail: string) => {
-      recordedFailure = true;
-      setAnalysisFlow(failAnalysisFlow(stage, detail));
-    };
-    setIsAnalyzing(true);
-    setAnalysisFlow(startAnalysisFlow(workspace.schema.length, samples.length));
-    setNotice(
-      layoutGuidance.trim()
-        ? "MING 正在根据展示指导分析 Schema 与少量截断样本…"
-        : "MING 正在分析 Schema 与少量截断样本…",
-    );
-    setNoticeTone("neutral");
-
-    try {
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          fileName: workspace.fileName,
-          schema: workspace.schema.slice(0, 120),
-          samples,
-          layoutGuidance: layoutGuidance.slice(0, MAX_LAYOUT_GUIDANCE_LENGTH),
-        }),
-      });
-      let payload: unknown;
-      try {
-        payload = await response.json();
-      } catch {
-        recordFailure("validation", "分析接口没有返回有效的 JSON 响应。");
-        throw new Error("无法读取模型分析结果。");
-      }
-      if (!response.ok) {
-        const failure = parseAnalysisFailure(payload);
-        if (failure) {
-          recordFailure(failure.stage, failure.detail);
-          throw new Error(failure.message);
-        }
-        recordFailure("provider", `分析接口返回 HTTP ${response.status}。`);
-        throw new Error("模型暂时无法分析布局。");
-      }
-      if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
-        recordFailure("validation", "分析接口返回了未知的数据结构。");
-        throw new Error("模型返回了未知响应。");
-      }
-      let blueprint: LayoutBlueprint;
-      try {
-        blueprint = parseBlueprint(
-          (payload as Record<string, unknown>).data,
-          workspace.schema,
-        );
-      } catch {
-        recordFailure("apply", "浏览器未能把已验证的蓝图应用到当前 Schema。");
-        throw new Error("布局无法应用到当前数据集。");
-      }
-      setWorkspace((current) => ({ ...current, blueprint }));
-      setViewKind(blueprint.kind);
-      setSource("model");
-      setAnalysisFlow(completeAnalysisFlow(parseAnalysisTrace(payload) ?? undefined));
-      setNotice("MING 布局已通过安全校验并应用。");
-      setNoticeTone("success");
-    } catch (caught) {
-      if (!recordedFailure) {
-        recordFailure("provider", "浏览器无法完成请求，请检查本地服务和网络连接。");
-      }
-      setNotice(
-        caught instanceof Error
-          ? `${caught.message} 已保留本地布局。`
-          : "模型分析失败，已保留本地布局。",
-      );
-      setNoticeTone("error");
-    } finally {
-      setIsAnalyzing(false);
-    }
-  }
-
   return (
     <div
       className={`forma-app${isDragging ? " is-dragging" : ""}`}
@@ -243,26 +58,51 @@ export function DatasetStudio() {
         event.preventDefault();
         setIsDragging(false);
         const file = event.dataTransfer.files[0];
-        if (file) void loadFile(file);
+        if (file) void dataset.loadFile(file);
       }}
     >
+      <input
+        ref={fileInputRef}
+        className="visually-hidden"
+        type="file"
+        accept=".json,.jsonl,.ndjson,application/json"
+        aria-label="选择 JSON 文件"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void dataset.loadFile(file);
+          event.target.value = "";
+        }}
+      />
       <WorkspaceHeader
         fileName={workspace.fileName}
         query={query}
-        onQueryChange={updateQuery}
-        onFile={(file) => void loadFile(file)}
-        onAddress={loadAddress}
+        onQueryChange={dataset.updateQuery}
+        onOpenFile={() => fileInputRef.current?.click()}
+        onAddress={dataset.loadAddress}
+      />
+
+      <DatasetTabs
+        tabs={dataset.tabs}
+        activeId={dataset.activeId}
+        onActivate={dataset.activateDataset}
+        onClose={dataset.closeDataset}
+        onAdd={() => fileInputRef.current?.click()}
       />
 
       <div className="notice-bar" role="status" aria-live="polite">
-        <span className={`notice-indicator tone-${noticeTone}`} aria-hidden="true" />
-        <span>{notice}</span>
+        <span className={`notice-indicator tone-${dataset.noticeTone}`} aria-hidden="true" />
+        <span>{dataset.notice}</span>
         <span className="notice-separator" aria-hidden="true">·</span>
         <span>完整文件不会上传</span>
         <AnalysisProcess flow={analysisFlow} />
       </div>
 
-      <div className="workspace-grid">
+      <div
+        id="dataset-workspace"
+        className="workspace-grid"
+        role="tabpanel"
+        aria-labelledby={`dataset-tab-${dataset.activeId}`}
+      >
         <SchemaPanel
           schema={workspace.schema}
           recordPath={workspace.recordPath}
@@ -275,18 +115,20 @@ export function DatasetStudio() {
           activeIndex={activeIndex}
           viewKind={viewKind}
           source={source}
-          onViewKindChange={setViewKind}
-          onActiveIndexChange={setActiveIndex}
-          onAnalyze={() => void analyzeWithModel()}
-          isAnalyzing={isAnalyzing}
+          onViewKindChange={dataset.updateViewKind}
+          onActiveIndexChange={dataset.updateActiveIndex}
+          onAnalyze={() => void dataset.analyzeWithModel()}
+          isAnalyzing={dataset.isAnalyzing}
+          tablePageSize={tablePageSize}
+          onTablePageSizeChange={dataset.updateTablePageSize}
         />
         <InspectorPanel
           blueprint={workspace.blueprint}
           record={activeRecord}
           source={source}
           layoutGuidance={layoutGuidance}
-          isAnalyzing={isAnalyzing}
-          onLayoutGuidanceChange={setLayoutGuidance}
+          isAnalyzing={dataset.isAnalyzing}
+          onLayoutGuidanceChange={dataset.updateLayoutGuidance}
         />
       </div>
 
@@ -294,7 +136,7 @@ export function DatasetStudio() {
         <div className="drop-overlay" role="status">
           <div>
             <span aria-hidden="true">↓</span>
-            <strong>松开即可打开数据集</strong>
+            <strong>松开即可新增数据集标签</strong>
             <p>支持 JSON、JSONL 与 NDJSON，最大 20 MB</p>
           </div>
         </div>

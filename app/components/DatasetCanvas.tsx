@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 import type { LayoutBlueprint, LayoutKind } from "../lib/blueprint.ts";
 import { getValueAtPath, type JsonRecord } from "../lib/dataset.ts";
 import { pageStartIndex, paginationForIndex } from "../lib/pagination.ts";
@@ -20,6 +18,8 @@ interface DatasetCanvasProps {
   onActiveIndexChange: (index: number) => void;
   onAnalyze: () => void;
   isAnalyzing: boolean;
+  tablePageSize: number;
+  onTablePageSizeChange: (pageSize: number) => void;
 }
 
 const VIEW_LABELS: Record<ViewKind, string> = {
@@ -110,8 +110,9 @@ export function DatasetCanvas({
   onActiveIndexChange,
   onAnalyze,
   isAnalyzing,
+  tablePageSize,
+  onTablePageSizeChange,
 }: DatasetCanvasProps) {
-  const [tablePageSize, setTablePageSize] = useState(25);
   const activeRecord = records[activeIndex];
   const viewOptions: ViewKind[] = Array.from(
     new Set<ViewKind>([blueprint.kind, "cards", "table", "raw"]),
@@ -160,7 +161,7 @@ export function DatasetCanvas({
           pageCount={pagination.pageCount}
           tablePageSize={viewKind === "table" ? tablePageSize : undefined}
           onPageChange={selectPage}
-          onTablePageSizeChange={setTablePageSize}
+          onTablePageSizeChange={onTablePageSizeChange}
         />
       </div>
 
