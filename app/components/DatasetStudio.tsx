@@ -7,6 +7,7 @@ import { AnalysisProcess } from "./AnalysisProcess";
 import { DatasetCanvas } from "./DatasetCanvas";
 import { DatasetTabs } from "./DatasetTabs";
 import { InspectorPanel } from "./InspectorPanel";
+import { SchemaChangeDialog } from "./SchemaChangeDialog";
 import { SchemaPanel } from "./SchemaPanel";
 import { useDatasetWorkspace } from "./useDatasetWorkspace";
 import { WorkspaceHeader } from "./WorkspaceHeader";
@@ -15,6 +16,7 @@ export function DatasetStudio() {
   const dataset = useDatasetWorkspace();
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputModeRef = useRef<"add" | "refresh">("add");
   const {
     workspace,
     query,
@@ -31,6 +33,11 @@ export function DatasetStudio() {
     [workspace.records, query],
   );
   const activeRecord = visibleRecords[activeIndex];
+
+  function openFilePicker(mode: "add" | "refresh") {
+    fileInputModeRef.current = mode;
+    fileInputRef.current?.click();
+  }
 
   useEffect(() => {
     function focusSearch(event: KeyboardEvent) {
@@ -69,7 +76,14 @@ export function DatasetStudio() {
         aria-label="选择 JSON 文件"
         onChange={(event) => {
           const file = event.target.files?.[0];
-          if (file) void dataset.loadFile(file);
+          if (file) {
+            if (fileInputModeRef.current === "refresh") {
+              void dataset.refreshActiveDataset(file);
+            } else {
+              void dataset.loadFile(file);
+            }
+          }
+          fileInputModeRef.current = "add";
           event.target.value = "";
         }}
       />
@@ -77,7 +91,7 @@ export function DatasetStudio() {
         fileName={workspace.fileName}
         query={query}
         onQueryChange={dataset.updateQuery}
-        onOpenFile={() => fileInputRef.current?.click()}
+        onOpenFile={() => openFilePicker("add")}
         onAddress={dataset.loadAddress}
       />
 
@@ -86,7 +100,7 @@ export function DatasetStudio() {
         activeId={dataset.activeId}
         onActivate={dataset.activateDataset}
         onClose={dataset.closeDataset}
-        onAdd={() => fileInputRef.current?.click()}
+        onAdd={() => openFilePicker("add")}
       />
 
       <div className="notice-bar" role="status" aria-live="polite">
@@ -119,6 +133,13 @@ export function DatasetStudio() {
           onActiveIndexChange={dataset.updateActiveIndex}
           onAnalyze={() => void dataset.analyzeWithModel()}
           isAnalyzing={dataset.isAnalyzing}
+          onRefresh={() => {
+            if (dataset.refreshRequiresFile) openFilePicker("refresh");
+            else void dataset.refreshActiveDataset();
+          }}
+          canRefresh={dataset.canRefresh}
+          refreshHint={dataset.refreshHint}
+          isRefreshing={dataset.isRefreshing}
           tablePageSize={tablePageSize}
           onTablePageSizeChange={dataset.updateTablePageSize}
         />
@@ -131,6 +152,15 @@ export function DatasetStudio() {
           onLayoutGuidanceChange={dataset.updateLayoutGuidance}
         />
       </div>
+
+      {dataset.pendingSchemaChange ? (
+        <SchemaChangeDialog
+          fileName={dataset.pendingSchemaChange.workspace.fileName}
+          difference={dataset.pendingSchemaChange.difference}
+          onCancel={dataset.cancelSchemaRefresh}
+          onConfirm={dataset.confirmSchemaRefresh}
+        />
+      ) : null}
 
       {isDragging ? (
         <div className="drop-overlay" role="status">

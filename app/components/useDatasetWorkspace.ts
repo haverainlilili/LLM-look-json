@@ -35,7 +35,16 @@ import {
   type SessionState,
 } from "../lib/dataset-sessions.ts";
 import { SAMPLE_FILE_NAME, SAMPLE_RECORDS } from "../lib/sample-data.ts";
+import {
+  compareSchemaStructure,
+  type SchemaDifference,
+} from "../lib/schema-diff.ts";
 import type { ViewKind } from "./DatasetCanvas";
+
+export type DatasetOrigin =
+  | { kind: "sample" }
+  | { kind: "file" }
+  | { kind: "address"; address: string };
 
 export interface WorkspaceData {
   fileName: string;
@@ -55,6 +64,14 @@ export interface DatasetSession {
   layoutGuidance: string;
   analysisFlow: AnalysisFlow;
   tablePageSize: number;
+  origin: DatasetOrigin;
+}
+
+export interface PendingSchemaChange {
+  sessionId: string;
+  workspace: WorkspaceData;
+  origin: DatasetOrigin;
+  difference: SchemaDifference;
 }
 
 function initialWorkspace(): WorkspaceData {
@@ -69,7 +86,34 @@ function initialWorkspace(): WorkspaceData {
   };
 }
 
-function createDatasetSession(workspace: WorkspaceData): DatasetSession {
+function workspaceFromText(text: string, fileName: string): WorkspaceData {
+  const parsed = parseDatasetText(text, fileName);
+  const schema = inferSchema(parsed.records);
+  return {
+    fileName,
+    format: parsed.format,
+    recordPath: parsed.recordPath,
+    records: parsed.records,
+    schema,
+    blueprint: createLocalBlueprint(fileName, schema, parsed.records),
+  };
+}
+
+function fileValidationMessage(file: File): string | null {
+  const lowerName = file.name.toLowerCase();
+  if (!lowerName.endsWith(".json") && !lowerName.endsWith(".jsonl") && !lowerName.endsWith(".ndjson")) {
+    return "请选择 .json、.jsonl 或 .ndjson 文件。";
+  }
+  if (file.size > MAX_DATASET_FILE_BYTES) {
+    return "首版浏览器支持最大 20 MB 文件；更大的数据建议先转换为抽样 JSONL。";
+  }
+  return null;
+}
+
+function createDatasetSession(
+  workspace: WorkspaceData,
+  origin: DatasetOrigin,
+): DatasetSession {
   return {
     workspace,
     query: "",
@@ -79,11 +123,15 @@ function createDatasetSession(workspace: WorkspaceData): DatasetSession {
     layoutGuidance: "",
     analysisFlow: createIdleAnalysisFlow(),
     tablePageSize: 25,
+    origin,
   };
 }
 
 function initialSessions(): SessionState<DatasetSession> {
-  return createSessionState({ id: "sample", value: createDatasetSession(initialWorkspace()) });
+  return createSessionState({
+    id: "sample",
+    value: createDatasetSession(initialWorkspace(), { kind: "sample" }),
+  });
 }
 
 export function useDatasetWorkspace() {
@@ -91,7 +139,10 @@ export function useDatasetWorkspace() {
   const [notice, setNotice] = useState("已载入示例数据；打开或拖入文件即可新增标签。");
   const [noticeTone, setNoticeTone] = useState<"neutral" | "success" | "error">("neutral");
   const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(() => new Set());
+  const [refreshingIds, setRefreshingIds] = useState<Set<string>>(() => new Set());
+  const [pendingSchemaChange, setPendingSchemaChange] = useState<PendingSchemaChange | null>(null);
   const analyzingIdsRef = useRef(new Set<string>());
+  const refreshingIdsRef = useRef(new Set<string>());
   const sessionSequence = useRef(1);
 
   const activeTab = sessions.tabs.find((tab) => tab.id === sessions.activeId) ?? sessions.tabs[0];
@@ -108,44 +159,35 @@ export function useDatasetWorkspace() {
     updateDatasetSession(activeTab.id, update);
   }
 
-  function applyDatasetText(text: string, fileName: string, sourceLabel: string) {
-    const parsed = parseDatasetText(text, fileName);
-    const schema = inferSchema(parsed.records);
-    const blueprint = createLocalBlueprint(fileName, schema, parsed.records);
+  function applyDatasetText(
+    text: string,
+    fileName: string,
+    sourceLabel: string,
+    origin: DatasetOrigin,
+  ) {
+    const workspace = workspaceFromText(text, fileName);
     const id = `dataset-${sessionSequence.current}`;
     sessionSequence.current += 1;
     setSessions((current) => addSession(current, {
       id,
-      value: createDatasetSession({
-        fileName,
-        format: parsed.format,
-        recordPath: parsed.recordPath,
-        records: parsed.records,
-        schema,
-        blueprint,
-      }),
+      value: createDatasetSession(workspace, origin),
     }));
     setNotice(
-      `${sourceLabel}解析 ${parsed.records.length.toLocaleString("zh-CN")} 条记录，已新增标签。`,
+      `${sourceLabel}解析 ${workspace.records.length.toLocaleString("zh-CN")} 条记录，已新增标签。`,
     );
     setNoticeTone("success");
   }
 
   async function loadFile(file: File) {
-    const lowerName = file.name.toLowerCase();
-    if (!lowerName.endsWith(".json") && !lowerName.endsWith(".jsonl") && !lowerName.endsWith(".ndjson")) {
-      setNotice("请选择 .json、.jsonl 或 .ndjson 文件。");
-      setNoticeTone("error");
-      return;
-    }
-    if (file.size > MAX_DATASET_FILE_BYTES) {
-      setNotice("首版浏览器支持最大 20 MB 文件；更大的数据建议先转换为抽样 JSONL。");
+    const validationMessage = fileValidationMessage(file);
+    if (validationMessage) {
+      setNotice(validationMessage);
       setNoticeTone("error");
       return;
     }
 
     try {
-      applyDatasetText(await file.text(), file.name, "已在本机");
+      applyDatasetText(await file.text(), file.name, "已在本机", { kind: "file" });
     } catch (caught) {
       setNotice(caught instanceof Error ? caught.message : "无法读取这个文件。");
       setNoticeTone("error");
@@ -158,13 +200,133 @@ export function useDatasetWorkspace() {
 
     try {
       const dataset = await fetchDatasetFromAddress(address);
-      applyDatasetText(dataset.text, dataset.fileName, "已从文件地址读取并");
+      applyDatasetText(dataset.text, dataset.fileName, "已从文件地址读取并", {
+        kind: "address",
+        address: address.trim(),
+      });
     } catch (caught) {
       const error = caught instanceof Error ? caught : new Error("无法读取这个文件地址。");
       setNotice(error.message);
       setNoticeTone("error");
       throw error;
     }
+  }
+
+  function applyRefreshedWorkspace(
+    sessionId: string,
+    previous: DatasetSession,
+    workspace: WorkspaceData,
+    origin: DatasetOrigin,
+  ) {
+    const difference = compareSchemaStructure(previous.workspace.schema, workspace.schema);
+    if (difference.changed) {
+      setPendingSchemaChange({ sessionId, workspace, origin, difference });
+      setNotice(`${workspace.fileName} 的数据结构发生变化，请确认是否重建模板。`);
+      setNoticeTone("error");
+      return;
+    }
+
+    updateDatasetSession(sessionId, (current) => ({
+      ...current,
+      workspace: {
+        ...workspace,
+        blueprint: {
+          ...current.workspace.blueprint,
+          description: workspace.blueprint.description,
+        },
+      },
+      origin,
+      activeIndex: 0,
+    }));
+    setNotice(
+      `${workspace.fileName} 已刷新 ${workspace.records.length.toLocaleString("zh-CN")} 条记录，并保留当前模板。`,
+    );
+    setNoticeTone("success");
+  }
+
+  async function refreshActiveDataset(file?: File) {
+    const sessionId = activeTab.id;
+    const session = activeTab.value;
+    if (session.origin.kind === "sample") {
+      setNotice("示例数据无需刷新；请先打开自己的数据集。");
+      setNoticeTone("neutral");
+      return;
+    }
+    if (
+      analyzingIdsRef.current.has(sessionId) ||
+      refreshingIdsRef.current.has(sessionId)
+    ) {
+      return;
+    }
+
+    if (session.origin.kind === "file") {
+      if (!file) {
+        setNotice("请重新选择修改后的本地文件。");
+        setNoticeTone("neutral");
+        return;
+      }
+      const validationMessage = fileValidationMessage(file);
+      if (validationMessage) {
+        setNotice(validationMessage);
+        setNoticeTone("error");
+        return;
+      }
+    }
+
+    refreshingIdsRef.current.add(sessionId);
+    setRefreshingIds(new Set(refreshingIdsRef.current));
+    setNotice(`${session.workspace.fileName}：正在检查最新数据与 Schema…`);
+    setNoticeTone("neutral");
+
+    try {
+      if (session.origin.kind === "address") {
+        const refreshed = await fetchDatasetFromAddress(session.origin.address);
+        applyRefreshedWorkspace(
+          sessionId,
+          session,
+          workspaceFromText(refreshed.text, refreshed.fileName),
+          session.origin,
+        );
+      } else if (file) {
+        applyRefreshedWorkspace(
+          sessionId,
+          session,
+          workspaceFromText(await file.text(), file.name),
+          { kind: "file" },
+        );
+      }
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : "无法刷新这个数据集。");
+      setNoticeTone("error");
+    } finally {
+      refreshingIdsRef.current.delete(sessionId);
+      setRefreshingIds(new Set(refreshingIdsRef.current));
+    }
+  }
+
+  function cancelSchemaRefresh() {
+    if (!pendingSchemaChange) return;
+    setNotice(`${pendingSchemaChange.workspace.fileName}：已取消刷新，当前数据保持不变。`);
+    setNoticeTone("neutral");
+    setPendingSchemaChange(null);
+  }
+
+  function confirmSchemaRefresh() {
+    if (!pendingSchemaChange) return;
+    const { sessionId, workspace, origin } = pendingSchemaChange;
+    updateDatasetSession(sessionId, (current) => ({
+      ...current,
+      workspace,
+      origin,
+      query: "",
+      activeIndex: 0,
+      viewKind: workspace.blueprint.kind,
+      source: "local",
+      analysisFlow: createIdleAnalysisFlow(),
+    }));
+    setNotice(`${workspace.fileName}：已按新结构重建本地模板并完成刷新。`);
+    setNoticeTone("success");
+    setPendingSchemaChange(null);
   }
 
   function activateDataset(id: string) {
@@ -177,7 +339,15 @@ export function useDatasetWorkspace() {
 
   function closeDataset(id: string) {
     const target = sessions.tabs.find((tab) => tab.id === id);
-    if (!target || sessions.tabs.length === 1 || analyzingIdsRef.current.has(id)) return;
+    if (
+      !target ||
+      sessions.tabs.length === 1 ||
+      analyzingIdsRef.current.has(id) ||
+      refreshingIdsRef.current.has(id) ||
+      pendingSchemaChange?.sessionId === id
+    ) {
+      return;
+    }
     setSessions((current) => closeSession(current, id));
     setNotice(`已关闭 ${target.value.workspace.fileName}。`);
     setNoticeTone("neutral");
@@ -186,7 +356,12 @@ export function useDatasetWorkspace() {
   async function analyzeWithModel() {
     const sessionId = activeTab.id;
     const session = activeTab.value;
-    if (analyzingIdsRef.current.has(sessionId)) return;
+    if (
+      analyzingIdsRef.current.has(sessionId) ||
+      refreshingIdsRef.current.has(sessionId)
+    ) {
+      return;
+    }
     const samples = createModelSamples(session.workspace.records);
     let recordedFailure = false;
     const recordFailure = (stage: AnalysisStage, detail: string) => {
@@ -284,12 +459,26 @@ export function useDatasetWorkspace() {
       fileName: tab.value.workspace.fileName,
       recordCount: tab.value.workspace.records.length,
       isAnalyzing: analyzingIds.has(tab.id),
+      isRefreshing: refreshingIds.has(tab.id),
     })),
     notice,
     noticeTone,
     isAnalyzing: analyzingIds.has(activeTab.id),
+    isRefreshing: refreshingIds.has(activeTab.id),
+    canRefresh: activeSession.origin.kind !== "sample",
+    refreshRequiresFile: activeSession.origin.kind === "file",
+    refreshHint:
+      activeSession.origin.kind === "sample"
+        ? "示例数据无需刷新"
+        : activeSession.origin.kind === "file"
+          ? "重新选择修改后的本地文件"
+          : "从原文件地址重新读取",
+    pendingSchemaChange,
     loadFile,
     loadAddress,
+    refreshActiveDataset,
+    cancelSchemaRefresh,
+    confirmSchemaRefresh,
     activateDataset,
     closeDataset,
     analyzeWithModel,

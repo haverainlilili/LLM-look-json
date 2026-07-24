@@ -7,6 +7,7 @@ interface DatasetTabItem {
   fileName: string;
   recordCount: number;
   isAnalyzing: boolean;
+  isRefreshing: boolean;
 }
 
 interface DatasetTabsProps {
@@ -76,15 +77,23 @@ export function DatasetTabs({
                   <span className="dataset-tab-mark" aria-hidden="true">◇</span>
                   <span className="dataset-tab-name">{tab.fileName}</span>
                   <span className="dataset-tab-count">
-                    {tab.isAnalyzing ? "MING…" : tab.recordCount.toLocaleString("zh-CN")}
+                    {tab.isAnalyzing
+                      ? "MING…"
+                      : tab.isRefreshing
+                        ? "刷新…"
+                        : tab.recordCount.toLocaleString("zh-CN")}
                   </span>
                 </button>
                 <button
                   className="dataset-tab-close"
                   type="button"
                   aria-label={`关闭 ${tab.fileName}`}
-                  title={tab.isAnalyzing ? "MING 分析完成后可关闭" : `关闭 ${tab.fileName}`}
-                  disabled={tabs.length === 1 || tab.isAnalyzing}
+                  title={
+                    tab.isAnalyzing || tab.isRefreshing
+                      ? "当前操作完成后可关闭"
+                      : `关闭 ${tab.fileName}`
+                  }
+                  disabled={tabs.length === 1 || tab.isAnalyzing || tab.isRefreshing}
                   onClick={() => onClose(tab.id)}
                 >
                   ×

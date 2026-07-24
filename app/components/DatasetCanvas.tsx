@@ -1,8 +1,9 @@
 "use client";
 
 import type { LayoutBlueprint, LayoutKind } from "../lib/blueprint.ts";
-import { getValueAtPath, type JsonRecord } from "../lib/dataset.ts";
+import type { JsonRecord } from "../lib/dataset.ts";
 import { pageStartIndex, paginationForIndex } from "../lib/pagination.ts";
+import { DatasetTableView } from "./DatasetTableView";
 import { PaginationControls } from "./PaginationControls";
 import { RecordRenderer } from "./RecordRenderer";
 
@@ -18,6 +19,10 @@ interface DatasetCanvasProps {
   onActiveIndexChange: (index: number) => void;
   onAnalyze: () => void;
   isAnalyzing: boolean;
+  onRefresh: () => void;
+  canRefresh: boolean;
+  refreshHint: string;
+  isRefreshing: boolean;
   tablePageSize: number;
   onTablePageSizeChange: (pageSize: number) => void;
 }
@@ -31,75 +36,6 @@ const VIEW_LABELS: Record<ViewKind, string> = {
   raw: "原始",
 };
 
-function compact(value: unknown): string {
-  const result =
-    typeof value === "string"
-      ? value
-      : value === undefined
-        ? "—"
-        : JSON.stringify(value);
-  return result.length > 88 ? `${result.slice(0, 88)}…` : result;
-}
-
-function TableView({
-  blueprint,
-  records,
-  activeIndex,
-  start,
-  end,
-  onSelect,
-}: {
-  blueprint: LayoutBlueprint;
-  records: JsonRecord[];
-  activeIndex: number;
-  start: number;
-  end: number;
-  onSelect: (index: number) => void;
-}) {
-  const fields = blueprint.fields.slice(0, 6);
-  return (
-    <div className="table-scroll">
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th scope="col">#</th>
-            {fields.map((field) => (
-              <th scope="col" key={field.path}>{field.label}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {records.slice(start, end).map((record, pageIndex) => {
-            const recordIndex = start + pageIndex;
-            return (
-              <tr
-                className={activeIndex === recordIndex ? "is-selected" : undefined}
-                key={recordIndex}
-              >
-                <th scope="row">
-                  <button
-                    type="button"
-                    onClick={() => onSelect(recordIndex)}
-                    aria-label={`查看第 ${recordIndex + 1} 条`}
-                  >
-                    {String(recordIndex + 1).padStart(2, "0")}
-                  </button>
-                </th>
-                {fields.map((field) => (
-                  <td key={field.path}>{compact(getValueAtPath(record, field.path))}</td>
-                ))}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      <p className="table-limit">
-        第 {start + 1}–{end} 条，共 {records.length.toLocaleString("zh-CN")} 条
-      </p>
-    </div>
-  );
-}
-
 export function DatasetCanvas({
   blueprint,
   records,
@@ -110,6 +46,10 @@ export function DatasetCanvas({
   onActiveIndexChange,
   onAnalyze,
   isAnalyzing,
+  onRefresh,
+  canRefresh,
+  refreshHint,
+  isRefreshing,
   tablePageSize,
   onTablePageSizeChange,
 }: DatasetCanvasProps) {
@@ -136,10 +76,27 @@ export function DatasetCanvas({
           </div>
           <p>{blueprint.description}</p>
         </div>
-        <button className="ai-button" type="button" onClick={onAnalyze} disabled={isAnalyzing}>
-          <span aria-hidden="true">✦</span>
-          {isAnalyzing ? "MING 正在分析…" : "MING 重组布局"}
-        </button>
+        <div className="canvas-actions">
+          <button
+            className="refresh-button"
+            type="button"
+            onClick={onRefresh}
+            disabled={!canRefresh || isRefreshing || isAnalyzing}
+            title={refreshHint}
+          >
+            <span aria-hidden="true">↻</span>
+            {isRefreshing ? "正在刷新…" : "刷新数据"}
+          </button>
+          <button
+            className="ai-button"
+            type="button"
+            onClick={onAnalyze}
+            disabled={isAnalyzing || isRefreshing}
+          >
+            <span aria-hidden="true">✦</span>
+            {isAnalyzing ? "MING 正在分析…" : "MING 重组布局"}
+          </button>
+        </div>
       </div>
 
       <div className="canvas-toolbar">
@@ -173,7 +130,7 @@ export function DatasetCanvas({
             <p>换一个关键词，或清空搜索条件。</p>
           </div>
         ) : viewKind === "table" ? (
-          <TableView
+          <DatasetTableView
             blueprint={blueprint}
             records={records}
             activeIndex={activeIndex}

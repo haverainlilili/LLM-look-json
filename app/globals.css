@@ -361,7 +361,8 @@ kbd {
 }
 
 .primary-button,
-.ai-button {
+.ai-button,
+.refresh-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -386,7 +387,8 @@ kbd {
 }
 
 .primary-button:active,
-.ai-button:active {
+.ai-button:active,
+.refresh-button:active {
   transform: translateY(1px);
 }
 
@@ -974,6 +976,13 @@ kbd {
   min-width: 0;
 }
 
+.canvas-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
 .title-line {
   flex-wrap: wrap;
   gap: 9px;
@@ -1028,6 +1037,30 @@ kbd {
 .ai-button:disabled {
   cursor: wait;
   opacity: 0.65;
+}
+
+.refresh-button {
+  min-height: 36px;
+  flex: 0 0 auto;
+  gap: 6px;
+  padding: 0 11px;
+  background: white;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 640;
+}
+
+.refresh-button:hover:not(:disabled) {
+  background: var(--surface-subtle);
+  border-color: #aeb8af;
+  color: var(--ink);
+}
+
+.refresh-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .canvas-toolbar {
@@ -1709,6 +1742,156 @@ kbd {
   background: white;
 }
 
+.schema-change-overlay {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(20 25 22 / 42%);
+  backdrop-filter: blur(3px);
+}
+
+.schema-change-dialog {
+  width: min(600px, 100%);
+  max-height: min(720px, calc(100vh - 40px));
+  overflow: auto;
+  padding: 24px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 24px 80px rgb(20 25 22 / 24%);
+}
+
+.schema-change-eyebrow {
+  margin: 0 0 5px;
+  color: var(--danger);
+  font-size: 10px;
+  font-weight: 720;
+  letter-spacing: 0.12em;
+}
+
+.schema-change-dialog > h2 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 680;
+  letter-spacing: -0.03em;
+}
+
+.schema-change-dialog > p:not(.schema-change-eyebrow) {
+  margin: 10px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.schema-change-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.schema-change-group {
+  min-width: 0;
+  padding: 12px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.schema-change-group > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.schema-change-group h3 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 680;
+}
+
+.schema-change-group > div > span {
+  min-width: 20px;
+  padding: 2px 6px;
+  background: var(--surface-strong);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 9px;
+  text-align: center;
+}
+
+.schema-change-group ul {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.schema-change-group li {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.schema-change-group code,
+.schema-change-group li > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schema-change-group code {
+  color: var(--ink-soft);
+  font-size: 10px;
+}
+
+.schema-change-group li > span {
+  margin-top: 2px;
+}
+
+.schema-change-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.schema-change-actions button {
+  min-height: 38px;
+  padding: 0 14px;
+  background: white;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.schema-change-actions button:hover {
+  background: var(--surface-subtle);
+  color: var(--ink);
+}
+
+.schema-change-actions button.is-primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: white;
+}
+
+.schema-change-actions button.is-primary:hover {
+  background: #303632;
+}
+
 .drop-overlay {
   position: fixed;
   z-index: 20;
@@ -1874,6 +2057,37 @@ kbd {
   }
 
   .ai-button {
+    flex: 1;
+  }
+
+  .canvas-actions,
+  .refresh-button {
+    width: 100%;
+  }
+
+  .refresh-button {
+    flex: 1;
+  }
+
+  .schema-change-overlay {
+    padding: 12px;
+  }
+
+  .schema-change-dialog {
+    max-height: calc(100vh - 24px);
+    padding: 18px;
+  }
+
+  .schema-change-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .schema-change-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .schema-change-actions button {
     width: 100%;
   }
 
