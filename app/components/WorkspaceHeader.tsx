@@ -2,11 +2,14 @@
 
 import { useRef } from "react";
 
+import { AddressImport } from "./AddressImport";
+
 interface WorkspaceHeaderProps {
   fileName: string;
   query: string;
   onQueryChange: (query: string) => void;
   onFile: (file: File) => void;
+  onAddress: (address: string) => Promise<void>;
 }
 
 export function WorkspaceHeader({
@@ -14,6 +17,7 @@ export function WorkspaceHeader({
   query,
   onQueryChange,
   onFile,
+  onAddress,
 }: WorkspaceHeaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -58,10 +62,13 @@ export function WorkspaceHeader({
             event.target.value = "";
           }}
         />
-        <button className="primary-button" type="button" onClick={() => inputRef.current?.click()}>
-          <span aria-hidden="true">＋</span>
-          打开 JSON
-        </button>
+        <div className="open-json-control">
+          <button className="primary-button" type="button" onClick={() => inputRef.current?.click()}>
+            <span aria-hidden="true">＋</span>
+            打开 JSON
+          </button>
+          <AddressImport onAddress={onAddress} />
+        </div>
       </div>
     </header>
   );

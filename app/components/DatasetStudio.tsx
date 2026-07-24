@@ -23,14 +23,16 @@ import {
   type SchemaField,
 } from "../lib/dataset.ts";
 import { MAX_LAYOUT_GUIDANCE_LENGTH } from "../lib/analysis-guidance.ts";
+import {
+  fetchDatasetFromAddress,
+  MAX_DATASET_FILE_BYTES,
+} from "../lib/dataset-source.ts";
 import { SAMPLE_FILE_NAME, SAMPLE_RECORDS } from "../lib/sample-data.ts";
 import { AnalysisProcess } from "./AnalysisProcess";
 import { DatasetCanvas, type ViewKind } from "./DatasetCanvas";
 import { InspectorPanel } from "./InspectorPanel";
 import { SchemaPanel } from "./SchemaPanel";
 import { WorkspaceHeader } from "./WorkspaceHeader";
-
-const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
 interface WorkspaceData {
   fileName: string;
@@ -88,6 +90,29 @@ export function DatasetStudio() {
     setActiveIndex(0);
   }
 
+  function applyDatasetText(text: string, fileName: string, sourceLabel: string) {
+    const parsed = parseDatasetText(text, fileName);
+    const schema = inferSchema(parsed.records);
+    const blueprint = createLocalBlueprint(fileName, schema, parsed.records);
+    setWorkspace({
+      fileName,
+      format: parsed.format,
+      recordPath: parsed.recordPath,
+      records: parsed.records,
+      schema,
+      blueprint,
+    });
+    setQuery("");
+    setActiveIndex(0);
+    setViewKind(blueprint.kind);
+    setSource("local");
+    setAnalysisFlow(createIdleAnalysisFlow());
+    setNotice(
+      `${sourceLabel}解析 ${parsed.records.length.toLocaleString("zh-CN")} 条记录。`,
+    );
+    setNoticeTone("success");
+  }
+
   async function loadFile(file: File) {
     const lowerName = file.name.toLowerCase();
     if (!lowerName.endsWith(".json") && !lowerName.endsWith(".jsonl") && !lowerName.endsWith(".ndjson")) {
@@ -95,34 +120,32 @@ export function DatasetStudio() {
       setNoticeTone("error");
       return;
     }
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > MAX_DATASET_FILE_BYTES) {
       setNotice("首版浏览器支持最大 20 MB 文件；更大的数据建议先转换为抽样 JSONL。");
       setNoticeTone("error");
       return;
     }
 
     try {
-      const parsed = parseDatasetText(await file.text(), file.name);
-      const schema = inferSchema(parsed.records);
-      const blueprint = createLocalBlueprint(file.name, schema, parsed.records);
-      setWorkspace({
-        fileName: file.name,
-        format: parsed.format,
-        recordPath: parsed.recordPath,
-        records: parsed.records,
-        schema,
-        blueprint,
-      });
-      setQuery("");
-      setActiveIndex(0);
-      setViewKind(blueprint.kind);
-      setSource("local");
-      setAnalysisFlow(createIdleAnalysisFlow());
-      setNotice(`已在本机解析 ${parsed.records.length.toLocaleString("zh-CN")} 条记录。`);
-      setNoticeTone("success");
+      applyDatasetText(await file.text(), file.name, "已在本机");
     } catch (caught) {
       setNotice(caught instanceof Error ? caught.message : "无法读取这个文件。");
       setNoticeTone("error");
+    }
+  }
+
+  async function loadAddress(address: string): Promise<void> {
+    setNotice("正在从文件地址读取 JSON…");
+    setNoticeTone("neutral");
+
+    try {
+      const dataset = await fetchDatasetFromAddress(address);
+      applyDatasetText(dataset.text, dataset.fileName, "已从文件地址读取并");
+    } catch (caught) {
+      const error = caught instanceof Error ? caught : new Error("无法读取这个文件地址。");
+      setNotice(error.message);
+      setNoticeTone("error");
+      throw error;
     }
   }
 
@@ -228,6 +251,7 @@ export function DatasetStudio() {
         query={query}
         onQueryChange={updateQuery}
         onFile={(file) => void loadFile(file)}
+        onAddress={loadAddress}
       />
 
       <div className="notice-bar" role="status" aria-live="polite">

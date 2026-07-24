@@ -32,12 +32,15 @@ test("server-renders the Forma dataset workspace", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   assert.equal(response.headers.get("x-frame-options"), "SAMEORIGIN");
-  assert.match(response.headers.get("content-security-policy") ?? "", /default-src 'self'/);
+  const contentSecurityPolicy = response.headers.get("content-security-policy") ?? "";
+  assert.match(contentSecurityPolicy, /default-src 'self'/);
+  assert.match(contentSecurityPolicy, /connect-src 'self' https:/);
 
   const html = await response.text();
   assert.match(html, /<title>Forma · 动态数据集浏览器<\/title>/i);
   assert.match(html, /让数据自己选择视图/);
   assert.match(html, /打开 JSON/);
+  assert.match(html, /粘贴文件地址/);
   assert.match(html, /对话数据集/);
   assert.match(html, /Schema/);
   assert.match(html, /MING 重组布局/);
